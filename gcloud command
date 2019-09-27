@@ -1,0 +1,106 @@
+### for create a simple cluster
+gcloud dataproc clusters create example-cluster \
+    --master-machine-type n1-standard-2 \
+    --worker-machine-type n1-standard-2
+
+
+### create a single-node cluster with juypternotebook
+gcloud beta dataproc clusters create example-cluster \
+    --optional-components=ANACONDA,JUPYTER \
+    --image-version=1.3 \
+    --enable-component-gateway \
+    --bucket big_data_hw \
+    --project test-project-251000 \
+    --single-node \
+    --metadata \
+    'PIP_PACKAGES=graphframes==0.6' \
+    --initialization-actions gs://dataproc-initialization-actions/python/pip-install.sh \
+    --region us-central1
+
+
+### Copy public data to your Cloud Storage bucket
+gsutil cp gs://pub/shakespeare/rose.txt \
+    gs://big_data_hw/input/rose.txt
+
+
+### submit job
+gcloud dataproc jobs submit pyspark ./Desktop/Myfile/EECS6893/HW0/wordcount.py \
+    --project=test-project-251000 \
+    --region=us-central1 \
+    --cluster=example-cluster \
+    -- gs://big_data_hw/input/ gs://big_data_hw/output/
+
+gsutil cat gs://big_data_hw/output/*
+
+
+### load data into bucket then into bigquery
+gsutil cp ./Desktop/Myfile/EECS6893/HW0/data_citibike_stations.csv \
+    gs://big_data_hw/hw0/data_citibike_stations.csv
+
+bq mk $DEVSHELL_PROJECT_ID:my_dataset
+
+bq load --source_format=CSV --autodetect=True \
+    $DEVSHELL_PROJECT_ID:my_dataset.nyc_citi_bike \
+    gs://big_data_hw/hw0/data_citibike_stations.csv
+
+bq ls my_dataset
+bq show my_dataset.nyc_citi_bike
+
+
+### query
+bq query --nouse_legacy_sql \
+'SELECT
+   COUNT(DISTINCT station_id)
+ FROM
+   `test-project-251000`.my_dataset.nyc_citi_bike'
+
+bq query --nouse_legacy_sql \
+'SELECT
+   MAX(capacity)
+ FROM
+   `test-project-251000`.my_dataset.nyc_citi_bike'
+
+bq query --nouse_legacy_sql \
+'SELECT
+   station_id
+ FROM
+   `test-project-251000`.my_dataset.nyc_citi_bike
+ WHERE
+   capacity = 79'
+
+bq query --nouse_legacy_sql \
+'SELECT
+   SUM(num_bikes_available)
+ FROM
+   `test-project-251000`.my_dataset.nyc_citi_bike
+ WHERE
+   region_id = 70'
+
+
+### shakespeare
+gsutil cp ./Desktop/Myfile/EECS6893/HW0/shakes.txt \
+    gs://big_data_hw/hw0/shakes.txt
+
+gcloud dataproc jobs submit pyspark ./Desktop/Myfile/EECS6893/HW0/shakes_unprocess.py \
+    --project=test-project-251000 \
+    --region=us-central1 \
+    --cluster=example-cluster \
+    -- gs://big_data_hw/hw0/shakes.txt
+
+gcloud beta dataproc clusters create example-cluster \
+    --optional-components=ANACONDA,JUPYTER \
+    --image-version=1.3 \
+    --enable-component-gateway \
+    --bucket big_data_hw \
+    --project test-project-251000 \
+    --single-node \
+    --metadata \
+    'PIP_PACKAGES=nltk' \
+    --initialization-actions gs://dataproc-initialization-actions/python/pip-install.sh \
+    --region us-central1
+
+gcloud dataproc jobs submit pyspark ./Desktop/Myfile/EECS6893/HW0/shakes_preprocess.py \
+    --project=test-project-251000 \
+    --region=us-central1 \
+    --cluster=example-cluster \
+    -- gs://big_data_hw/hw0/shakes.txt
